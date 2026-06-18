@@ -66,7 +66,7 @@ async def on_message(message):
                 ] + conversation_history[channel_id]
 
                 response = groq_client.chat.completions.create(
-                    model="llama3-70b-8192",  # free and very good
+                    model="llama-3.3-70b-versatile", 
                     messages=messages_to_send,
                     max_tokens=200,
                     temperature=0.9
