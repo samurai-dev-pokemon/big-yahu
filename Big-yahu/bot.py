@@ -1,5 +1,5 @@
 import discord
-import openai
+from groq import Groq
 import os
 from dotenv import load_dotenv
 from collections import defaultdict
@@ -10,13 +10,10 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Groq client
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# This stores conversation history per channel
-# defaultdict means it auto creates empty list for new channels
 conversation_history = defaultdict(list)
-
-# Max messages to remember (keeps costs low)
 MAX_HISTORY = 10
 
 SYSTEM_PROMPT = """
@@ -35,7 +32,6 @@ You respond in character with these traits:
 - You occasionally slip in "Bibi knows best"
 - Keep responses SHORT and punchy (2-5 sentences max)
 - Be funny, not offensive or hateful
-- Never say anything actually harmful or antisemitic
 - You're a MEME character, keep it light and absurd
 - You REMEMBER previous messages in the conversation and reference them
 """
@@ -46,42 +42,31 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # Ignore bot messages
     if message.author == client.user:
         return
 
-    # Check if bot was mentioned
     if client.user in message.mentions:
 
-        # Get user message
         user_message = message.content.replace(f"<@{client.user.id}>", "").strip()
 
         if not user_message:
             user_message = "Say hello and introduce yourself"
 
-        # Use channel ID as the key for memory
         channel_id = message.channel.id
 
-        # Add the new user message to history
         conversation_history[channel_id].append({
             "role": "user",
             "content": f"{message.author.display_name} says: {user_message}"
-            # ^ adding username so Big Yahu knows WHO is talking
         })
-
-        print(f"[Channel {channel_id}] {message.author}: {user_message}")
-        print(f"History length: {len(conversation_history[channel_id])}")
 
         async with message.channel.typing():
             try:
-                # Build the full message list
-                # System prompt + all history
                 messages_to_send = [
                     {"role": "system", "content": SYSTEM_PROMPT}
                 ] + conversation_history[channel_id]
 
-                response = openai.chat.completions.create(
-                    model="gpt-4o-mini",
+                response = groq_client.chat.completions.create(
+                    model="llama3-70b-8192",  # free and very good
                     messages=messages_to_send,
                     max_tokens=200,
                     temperature=0.9
@@ -89,14 +74,11 @@ async def on_message(message):
 
                 reply = response.choices[0].message.content
 
-                # Save Big Yahu's response to history too
                 conversation_history[channel_id].append({
                     "role": "assistant",
                     "content": reply
                 })
 
-                # Trim history if it gets too long
-                # Keeps only the last MAX_HISTORY messages
                 if len(conversation_history[channel_id]) > MAX_HISTORY:
                     conversation_history[channel_id] = conversation_history[channel_id][-MAX_HISTORY:]
 
@@ -106,7 +88,6 @@ async def on_message(message):
                 print(f"Error: {e}")
                 await message.reply("My friend... even Big Yahu has technical difficulties. Blame Iran.")
 
-    # Secret command to wipe memory (type !forgetbibi in chat)
     if message.content.lower() == "!forgetbibi":
         channel_id = message.channel.id
         conversation_history[channel_id] = []
